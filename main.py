@@ -19,6 +19,7 @@ def get_required_channels():
             channels.append(ch)
     return channels
 
+# دالة بتفحص المستخدم وتطلع القنوات اللي لسه مشتركش فيها
 def get_unsubscribed_channels(user_id):
     channels = get_required_channels()
     unsubscribed = []
@@ -43,6 +44,10 @@ def get_sub_keyboard(unsub_channels):
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
+    # السطرين دول بيمنعوا البوت يرد على /start في الجروبات
+    if message.chat.type != 'private':
+        return
+        
     unsub = get_unsubscribed_channels(message.from_user.id)
     if unsub:
         markup = get_sub_keyboard(unsub)
@@ -51,7 +56,8 @@ def send_welcome(message):
         
     bot.reply_to(message, "أهلاً بك! أرسل لي أي رابط من يوتيوب أو تيك توك وسأقوم بتحميله لك.")
 
-@bot.message_handler(func=lambda message: True)
+# الفلتر ده بيخلي البوت يتجاهل أي رسالة مش في الخاص (private) 
+@bot.message_handler(func=lambda message: message.chat.type == 'private' and message.text and ('youtube' in message.text.lower() or 'youtu.be' in message.text.lower() or 'tiktok' in message.text.lower()))
 def download_video(message):
     unsub = get_unsubscribed_channels(message.from_user.id)
     if unsub:
