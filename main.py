@@ -7,7 +7,6 @@ from keep_alive import keep_alive
 TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
-# دالة بتجيب القنوات من ريندر
 def get_required_channels():
     channels = []
     for i in range(1, 11):
@@ -19,7 +18,6 @@ def get_required_channels():
             channels.append(ch)
     return channels
 
-# دالة بتفحص اشتراك المستخدم
 def get_unsubscribed_channels(user_id):
     channels = get_required_channels()
     unsubscribed = []
@@ -33,7 +31,6 @@ def get_unsubscribed_channels(user_id):
             unsubscribed.append(channel) 
     return unsubscribed
 
-# دالة الأزرار الشفافة
 def get_sub_keyboard(unsub_channels):
     markup = InlineKeyboardMarkup()
     for i, ch in enumerate(unsub_channels):
@@ -54,10 +51,10 @@ def send_welcome(message):
         bot.reply_to(message, "عذراً عزيزي ✋\nيجب عليك الاشتراك في قنوات البوت أولاً لتتمكن من استخدامه.\n\n👇 اضغط على الأزرار بالأسفل للاشتراك:", reply_markup=markup)
         return
         
-    bot.reply_to(message, "أهلاً بك! أرسل لي أي رابط فيديو (يوتيوب، تيك توك، انستجرام...) وسأقوم بتحميله لك.")
+    bot.reply_to(message, "أهلاً بك! أرسل لي أي رابط وسأقوم بتحميله لك.")
 
-# يشتغل على أي رسالة فيها رابط (http أو https) في الخاص بس
-@bot.message_handler(func=lambda message: message.chat.type == 'private' and message.text and ('http://' in message.text or 'https://' in message.text))
+# رجعنا الفلتر القديم بتاعك بس ضفنا شرط الخاص بس
+@bot.message_handler(func=lambda message: message.chat.type == 'private')
 def download_video(message):
     unsub = get_unsubscribed_channels(message.from_user.id)
     if unsub:
@@ -68,7 +65,6 @@ def download_video(message):
     url = message.text
     msg = bot.reply_to(message, "جاري معالجة الرابط والتحميل، يرجى الانتظار قليلاً... ⏳")
     
-    # إعدادات التحميل القديمة المستقرة
     ydl_opts = {
         'outtmpl': 'downloaded_video.%(ext)s',
         'format': 'best[ext=mp4]/best'
@@ -87,8 +83,8 @@ def download_video(message):
                 break
                 
     except Exception as e:
-        # رسالة الخطأ العادية (بدون تفاصيل مزعجة)
-        bot.reply_to(message, "حدث خطأ أثناء التحميل، تأكد من الرابط.")
+        # التعديل الأهم: إظهار الخطأ الحقيقي باللغة الإنجليزية
+        bot.reply_to(message, f"حدث خطأ أثناء التحميل:\n\n{str(e)}")
 
 keep_alive()
 print("البوت يعمل الآن...")
