@@ -1,4 +1,5 @@
 import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import yt_dlp
 import os
 from keep_alive import keep_alive 
@@ -6,16 +7,18 @@ from keep_alive import keep_alive
 TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
-# دالة بتجيب كل القنوات من 1 لـ 10 من إعدادات ريندر
+# دالة بتجيب القنوات وبتتأكد إن فيها علامة @
 def get_required_channels():
     channels = []
     for i in range(1, 11):
         ch = os.environ.get(f'CHANNEL_{i}')
         if ch:
+            ch = ch.strip()
+            if not ch.startswith('@'):
+                ch = '@' + ch
             channels.append(ch)
     return channels
 
-# دالة بتفحص المستخدم وتطلع القنوات اللي لسه مشتركش فيها
 def get_unsubscribed_channels(user_id):
     channels = get_required_channels()
     unsubscribed = []
@@ -29,13 +32,21 @@ def get_unsubscribed_channels(user_id):
             unsubscribed.append(channel) 
     return unsubscribed
 
+# دالة بتعمل الأزرار الشفافة
+def get_sub_keyboard(unsub_channels):
+    markup = InlineKeyboardMarkup()
+    for i, ch in enumerate(unsub_channels):
+        ch_username = ch.replace('@', '')
+        btn = InlineKeyboardButton(text=f"📢 اشترك في القناة {i+1}", url=f"https://t.me/{ch_username}")
+        markup.add(btn)
+    return markup
+
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     unsub = get_unsubscribed_channels(message.from_user.id)
     if unsub:
-        # تجميع القنوات اللي ناقصة في رسالة واحدة
-        channels_list = "\n".join([f"🔗 {ch}" for ch in unsub])
-        bot.reply_to(message, f"عذراً عزيزي ✋\nيجب عليك الاشتراك في قنوات البوت أولاً لتتمكن من استخدامه.\n\n{channels_list}\n\nبعد الاشتراك أرسل /start")
+        markup = get_sub_keyboard(unsub)
+        bot.reply_to(message, "عذراً عزيزي ✋\nيجب عليك الاشتراك في قنوات البوت أولاً لتتمكن من استخدامه.\n\n👇 اضغط على الأزرار بالأسفل للاشتراك:", reply_markup=markup)
         return
         
     bot.reply_to(message, "أهلاً بك! أرسل لي أي رابط من يوتيوب أو تيك توك وسأقوم بتحميله لك.")
@@ -44,8 +55,8 @@ def send_welcome(message):
 def download_video(message):
     unsub = get_unsubscribed_channels(message.from_user.id)
     if unsub:
-        channels_list = "\n".join([f"🔗 {ch}" for ch in unsub])
-        bot.reply_to(message, f"عذراً عزيزي ✋\nيجب عليك الاشتراك في قنوات البوت أولاً لتتمكن من التحميل.\n\n{channels_list}\n\nبعد الاشتراك أرسل الرابط مجدداً.")
+        markup = get_sub_keyboard(unsub)
+        bot.reply_to(message, "عذراً عزيزي ✋\nيجب عليك الاشتراك في قنوات البوت أولاً لتتمكن من التحميل.\n\n👇 اضغط على الأزرار بالأسفل للاشتراك:", reply_markup=markup)
         return
 
     url = message.text
@@ -69,7 +80,7 @@ def download_video(message):
                 break
                 
     except Exception as e:
-        bot.reply_to(message, f"حدث خطأ أثناء التحميل، تأكد من الرابط.")
+        bot.reply_to(message, "حدث خطأ أثناء التحميل، تأكد من الرابط.")
 
 keep_alive()
 print("البوت يعمل الآن...")
