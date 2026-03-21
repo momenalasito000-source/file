@@ -7,7 +7,7 @@ from keep_alive import keep_alive
 TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
-# دالة بتجيب القنوات وبتتأكد إن فيها علامة @
+# دالة بتجيب القنوات من ريندر
 def get_required_channels():
     channels = []
     for i in range(1, 11):
@@ -19,7 +19,7 @@ def get_required_channels():
             channels.append(ch)
     return channels
 
-# دالة بتفحص المستخدم وتطلع القنوات اللي لسه مشتركش فيها
+# دالة بتفحص اشتراك المستخدم
 def get_unsubscribed_channels(user_id):
     channels = get_required_channels()
     unsubscribed = []
@@ -33,7 +33,7 @@ def get_unsubscribed_channels(user_id):
             unsubscribed.append(channel) 
     return unsubscribed
 
-# دالة بتعمل الأزرار الشفافة
+# دالة الأزرار الشفافة
 def get_sub_keyboard(unsub_channels):
     markup = InlineKeyboardMarkup()
     for i, ch in enumerate(unsub_channels):
@@ -44,7 +44,7 @@ def get_sub_keyboard(unsub_channels):
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    # السطرين دول بيمنعوا البوت يرد على /start في الجروبات
+    # يمنع البوت يرد في الجروبات
     if message.chat.type != 'private':
         return
         
@@ -54,10 +54,10 @@ def send_welcome(message):
         bot.reply_to(message, "عذراً عزيزي ✋\nيجب عليك الاشتراك في قنوات البوت أولاً لتتمكن من استخدامه.\n\n👇 اضغط على الأزرار بالأسفل للاشتراك:", reply_markup=markup)
         return
         
-    bot.reply_to(message, "أهلاً بك! أرسل لي أي رابط من يوتيوب أو تيك توك وسأقوم بتحميله لك.")
+    bot.reply_to(message, "أهلاً بك! أرسل لي أي رابط فيديو (يوتيوب، تيك توك، انستجرام...) وسأقوم بتحميله لك.")
 
-# الفلتر ده بيخلي البوت يتجاهل أي رسالة مش في الخاص (private) 
-@bot.message_handler(func=lambda message: message.chat.type == 'private' and message.text and ('youtube' in message.text.lower() or 'youtu.be' in message.text.lower() or 'tiktok' in message.text.lower()))
+# يشتغل على أي رسالة فيها رابط (http أو https) في الخاص بس
+@bot.message_handler(func=lambda message: message.chat.type == 'private' and message.text and ('http://' in message.text or 'https://' in message.text))
 def download_video(message):
     unsub = get_unsubscribed_channels(message.from_user.id)
     if unsub:
@@ -68,6 +68,7 @@ def download_video(message):
     url = message.text
     msg = bot.reply_to(message, "جاري معالجة الرابط والتحميل، يرجى الانتظار قليلاً... ⏳")
     
+    # إعدادات التحميل القديمة المستقرة
     ydl_opts = {
         'outtmpl': 'downloaded_video.%(ext)s',
         'format': 'best[ext=mp4]/best'
@@ -86,6 +87,7 @@ def download_video(message):
                 break
                 
     except Exception as e:
+        # رسالة الخطأ العادية (بدون تفاصيل مزعجة)
         bot.reply_to(message, "حدث خطأ أثناء التحميل، تأكد من الرابط.")
 
 keep_alive()
