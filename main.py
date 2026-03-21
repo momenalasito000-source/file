@@ -3,7 +3,7 @@ import yt_dlp
 import os
 from keep_alive import keep_alive 
 
-TOKEN = os.environ.get('TELEGRAM_TOKEN')
+TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
 MAX_SIZE_BYTES = 50 * 1024 * 1024  # 50MB حد تيليجرام
