@@ -156,5 +156,4 @@ def callback_handler(call):
 
 keep_alive()
 print("البوت يعمل الآن ومستعد للترجمة...")
-bot.infini
-ty_polling()
+bot.infinity_polling()
