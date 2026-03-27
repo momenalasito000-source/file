@@ -3,6 +3,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import yt_dlp
 import os
 import subprocess
+import time
 from keep_alive import keep_alive 
 import static_ffmpeg
 import assemblyai as aai
@@ -16,7 +17,6 @@ bot = telebot.TeleBot(TOKEN)
 # مفتاح الذكاء الاصطناعي بتاعك
 aai.settings.api_key = '574d2294a8cf4590b594b4cae9ad59b5'
 
-# قاموس لتخزين روابط الفيديوهات
 video_cache = {}
 
 def get_required_channels():
@@ -52,42 +52,21 @@ def get_sub_keyboard(unsub_channels):
     return markup
 
 def translate_srt_text(srt_text, target_lang):
-    """النسخة الجديدة: تجميع النصوص لترجمتها مرة واحدة لتجنب حظر جوجل"""
+    """الحل الأول: الترجمة الآمنة سطر بسطر مع تأخير زمني لتجنب حظر جوجل"""
     lines = srt_text.split('\n')
-    text_indices = []
-    texts = []
+    translator = GoogleTranslator(source='auto', target=target_lang)
     
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        # نفلتر الأرقام والتوقيتات وناخد الكلام بس
-        if stripped and not stripped.isdigit() and '-->' not in stripped:
-            text_indices.append(i)
-            texts.append(stripped)
-    
-    if texts:
-        try:
-            translator = GoogleTranslator(source='auto', target=target_lang)
-            # دمجهم بفاصل مميز
-            combined = " @@@ ".join(texts)
-            translated_combined = translator.translate(combined)
-            
-            # إعادة تقسيمهم
-            translated_texts = [t.strip() for t in translated_combined.split('@@@')]
-            
-            # لو التقسيم رجع مظبوط، نركبهم في التوقيتات
-            if len(translated_texts) == len(texts):
-                for idx, txt in zip(text_indices, translated_texts):
-                    lines[idx] = txt
-            else:
-                # خطة بديلة لو جوجل مسح الفاصل
-                for idx, txt in zip(text_indices, texts):
-                    try:
-                        lines[idx] = translator.translate(txt)
-                    except:
-                        pass
-        except Exception as e:
-            print(f"Error translating: {e}")
-            
+    for i in range(len(lines)):
+        line = lines[i].strip()
+        # لو السطر مش فاضي، ومش رقم، ومش توقيت.. يبقى ده الكلام اللي هيترجم
+        if line and not line.isdigit() and '-->' not in line:
+            try:
+                translated = translator.translate(line)
+                lines[i] = translated
+                time.sleep(0.2) # تأخير 200 ملي ثانية عشان جوجل ميحظرناش
+            except Exception as e:
+                print(f"Error: {e}")
+                pass
     return '\n'.join(lines)
 
 @bot.message_handler(commands=['start'])
@@ -191,7 +170,7 @@ def callback_handler(call):
                 
             original_srt = transcript.export_subtitles_srt()
             
-            bot.edit_message_text("3️⃣ جاري ترجمة النص للغة المطلوبة... 🌍", call.message.chat.id, status_msg.message_id)
+            bot.edit_message_text("3️⃣ جاري الترجمة الاحترافية للغة المطلوبة... 🌍", call.message.chat.id, status_msg.message_id)
             
             translated_srt = translate_srt_text(original_srt, target_lang)
             
@@ -200,10 +179,10 @@ def callback_handler(call):
             
             bot.edit_message_text("4️⃣ جاري دمج الترجمة على الفيديو، لحظات ويكون جاهز! 🎬", call.message.chat.id, status_msg.message_id)
             
-            # التعديل الجديد: إزالة المربع الأسود وتغييره لخط أبيض بحدود سوداء واضحة وحجم مناسب
+            # تم ضبط شكل الترجمة: خط واضح، بدون مربعات سوداء، مع حد خارجي أسود للقراءة السهلة
             ffmpeg_cmd = [
                 'ffmpeg', '-i', vid_filename, 
-                '-vf', "subtitles=translated.srt:force_style='FontSize=16,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=1,MarginV=30'", 
+                '-vf', "subtitles=translated.srt:force_style='FontName=Arial,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=0,Alignment=2,MarginV=25'", 
                 'final_video.mp4', '-y'
             ]
             result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
