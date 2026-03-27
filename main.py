@@ -4,6 +4,8 @@ import yt_dlp
 import os
 import subprocess
 from keep_alive import keep_alive 
+import static_ffmpeg
+static_ffmpeg.add_paths()
 
 TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
