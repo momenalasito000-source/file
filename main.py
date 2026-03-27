@@ -1,5 +1,4 @@
 import telebot
-import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import yt_dlp
 import os
@@ -96,7 +95,6 @@ def download_video(message):
     url = message.text
     msg = bot.reply_to(message, "جاري معالجة الرابط والتحميل، يرجى الانتظار قليلاً... ⏳")
     
-    # تحسين طريقة الحفظ عشان نتجنب أخطاء تيك توك
     ydl_opts = {
         'outtmpl': 'downloaded_vid_%(id)s.%(ext)s',
         'format': 'best'
@@ -146,17 +144,24 @@ def callback_handler(call):
         bot.answer_callback_query(call.id, "بدأنا العمل... ⏳")
         status_msg = bot.send_message(call.message.chat.id, "1️⃣ جاري تحميل الفيديو لاستخراج الصوت... ⚙️")
 
-        ydl_opts = {'outtmpl': 'temp_vid.mp4', 'format': 'best'}
+        # تحسين التحميل أثناء الترجمة لتجنب أخطاء تيك توك
+        ydl_opts = {
+            'outtmpl': 'temp_vid_%(id)s.%(ext)s',
+            'format': 'best'
+        }
+        
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
+                info = ydl.extract_info(url, download=True)
+                vid_filename = ydl.prepare_filename(info)
             
             bot.edit_message_text("2️⃣ جاري الاستماع للفيديو وتفريغ الصوت (الذكاء الاصطناعي يعمل)... 🧠", call.message.chat.id, status_msg.message_id)
             
-            subprocess.run(['ffmpeg', '-i', 'temp_vid.mp4', '-q:a', '0', '-map', 'a', 'temp_audio.mp3', '-y'])
+            subprocess.run(['ffmpeg', '-i', vid_filename, '-q:a', '0', '-map', 'a', 'temp_audio.mp3', '-y'])
             
-            # الحل السحري: سيبنا النظام هو اللي يختار الموديل المناسب
+            # الحل النهائي الجذري لشركة AssemblyAI
             config = aai.TranscriptionConfig(
+                speech_models=["universal-2"],
                 language_detection=True
             )
             
@@ -179,7 +184,7 @@ def callback_handler(call):
             bot.edit_message_text("4️⃣ جاري دمج الترجمة على الفيديو، لحظات ويكون جاهز! 🎬", call.message.chat.id, status_msg.message_id)
             
             ffmpeg_cmd = [
-                'ffmpeg', '-i', 'temp_vid.mp4', 
+                'ffmpeg', '-i', vid_filename, 
                 '-vf', "subtitles=translated.srt:force_style='FontSize=24,PrimaryColour=&H00FFFFFF,BorderStyle=3,Outline=1,Shadow=1,MarginV=20'", 
                 'final_video.mp4', '-y'
             ]
@@ -192,7 +197,7 @@ def callback_handler(call):
                     bot.send_video(call.message.chat.id, translated_vid, caption=f"✅ تمت الترجمة بنجاح بواسطة @MyVidDownloader_bot")
                 bot.delete_message(call.message.chat.id, status_msg.message_id)
             
-            for f_name in ['temp_vid.mp4', 'temp_audio.mp3', 'final_video.mp4', 'translated.srt']:
+            for f_name in [vid_filename, 'temp_audio.mp3', 'final_video.mp4', 'translated.srt']:
                 if os.path.exists(f_name):
                     os.remove(f_name)
             
