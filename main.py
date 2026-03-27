@@ -125,13 +125,12 @@ def callback_handler(call):
         bot.answer_callback_query(call.id, "جاري تجهيز الترجمة... ⏳")
         bot.send_message(call.message.chat.id, "جاري سحب الصوت ودمج الترجمة، قد يستغرق هذا دقيقة... ⚙️")
 
-        # هنا البوت بينزل الفيديو تاني عشان يدمج عليه الترجمة
-        ydl_opts = {'outtmpl': 'temp_vid.%(ext)s', 'format': 'best[ext=mp4]/best'}
+        # إجبار التنزيل بصيغة mp4 صريحة
+        ydl_opts = {'outtmpl': 'temp_vid.mp4', 'format': 'best'}
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
             
-            # 1. إنشاء ملف ترجمة تجريبي (لحين ربطه بالذكاء الاصطناعي)
             srt_content = """1
 00:00:01,000 --> 00:00:07,000
 تمت الترجمة بنجاح بواسطة @MyVidDownloader_bot!
@@ -139,17 +138,19 @@ def callback_handler(call):
             with open("subtitles.srt", "w", encoding="utf-8") as f:
                 f.write(srt_content)
             
-            # 2. دمج الترجمة على الفيديو باستخدام FFmpeg
-            subprocess.run(['ffmpeg', '-i', 'temp_vid.mp4', '-vf', 'subtitles=subtitles.srt', 'final_video.mp4', '-y'])
+            # تشغيل FFmpeg مع التقاط الأخطاء لمنع التجميد
+            result = subprocess.run(['ffmpeg', '-i', 'temp_vid.mp4', '-vf', 'subtitles=subtitles.srt', 'final_video.mp4', '-y'], capture_output=True, text=True)
             
-            # 3. إرسال الفيديو المترجم
-            with open('final_video.mp4', 'rb') as translated_vid:
-                bot.send_video(call.message.chat.id, translated_vid, caption=f"✅ تم دمج الترجمة بنجاح!")
+            if result.returncode != 0:
+                bot.send_message(call.message.chat.id, f"⚠️ خطأ في برنامج الدمج:\n{result.stderr[-300:]}")
+            else:
+                with open('final_video.mp4', 'rb') as translated_vid:
+                    bot.send_video(call.message.chat.id, translated_vid, caption=f"✅ تم دمج الترجمة بنجاح!")
             
-            # تنظيف السيرفر من الملفات المؤقتة
-            os.remove('temp_vid.mp4')
-            os.remove('final_video.mp4')
-            os.remove('subtitles.srt')
+            # تنظيف الملفات سواء نجح أو فشل
+            for f_name in ['temp_vid.mp4', 'final_video.mp4', 'subtitles.srt']:
+                if os.path.exists(f_name):
+                    os.remove(f_name)
             
         except Exception as e:
             bot.send_message(call.message.chat.id, f"حدث خطأ أثناء الترجمة: {e}")
