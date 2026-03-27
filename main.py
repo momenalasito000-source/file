@@ -156,9 +156,9 @@ def callback_handler(call):
             # استخراج الصوت
             subprocess.run(['ffmpeg', '-i', 'temp_vid.mp4', '-q:a', '0', '-map', 'a', 'temp_audio.mp3', '-y'])
             
-            # إعدادات الذكاء الاصطناعي: الموديل السريع والتعرف التلقائي على اللغة
+            # التعديل الجديد هنا: استخدام speech_models كقائمة 
             config = aai.TranscriptionConfig(
-                speech_model=aai.SpeechModel.nano,
+                speech_models=[aai.SpeechModel.nano],
                 language_detection=True
             )
             
