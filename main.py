@@ -52,24 +52,43 @@ def get_sub_keyboard(unsub_channels):
     return markup
 
 def translate_srt_text(srt_text, target_lang):
-    """دالة لترجمة الكلام فقط وترك التوقيتات كما هي"""
+    """النسخة الجديدة: تجميع النصوص لترجمتها مرة واحدة لتجنب حظر جوجل"""
     lines = srt_text.split('\n')
-    translated_lines = []
-    translator = GoogleTranslator(source='auto', target=target_lang)
+    text_indices = []
+    texts = []
     
-    for line in lines:
-        line = line.strip()
-        if not line:
-            translated_lines.append('')
-        elif '-->' in line or line.isdigit():
-            translated_lines.append(line)
-        else:
-            try:
-                translated = translator.translate(line)
-                translated_lines.append(translated)
-            except:
-                translated_lines.append(line)
-    return '\n'.join(translated_lines)
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        # نفلتر الأرقام والتوقيتات وناخد الكلام بس
+        if stripped and not stripped.isdigit() and '-->' not in stripped:
+            text_indices.append(i)
+            texts.append(stripped)
+    
+    if texts:
+        try:
+            translator = GoogleTranslator(source='auto', target=target_lang)
+            # دمجهم بفاصل مميز
+            combined = " @@@ ".join(texts)
+            translated_combined = translator.translate(combined)
+            
+            # إعادة تقسيمهم
+            translated_texts = [t.strip() for t in translated_combined.split('@@@')]
+            
+            # لو التقسيم رجع مظبوط، نركبهم في التوقيتات
+            if len(translated_texts) == len(texts):
+                for idx, txt in zip(text_indices, translated_texts):
+                    lines[idx] = txt
+            else:
+                # خطة بديلة لو جوجل مسح الفاصل
+                for idx, txt in zip(text_indices, texts):
+                    try:
+                        lines[idx] = translator.translate(txt)
+                    except:
+                        pass
+        except Exception as e:
+            print(f"Error translating: {e}")
+            
+    return '\n'.join(lines)
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -144,7 +163,6 @@ def callback_handler(call):
         bot.answer_callback_query(call.id, "بدأنا العمل... ⏳")
         status_msg = bot.send_message(call.message.chat.id, "1️⃣ جاري تحميل الفيديو لاستخراج الصوت... ⚙️")
 
-        # تحسين التحميل أثناء الترجمة لتجنب أخطاء تيك توك
         ydl_opts = {
             'outtmpl': 'temp_vid_%(id)s.%(ext)s',
             'format': 'best'
@@ -159,7 +177,6 @@ def callback_handler(call):
             
             subprocess.run(['ffmpeg', '-i', vid_filename, '-q:a', '0', '-map', 'a', 'temp_audio.mp3', '-y'])
             
-            # الحل النهائي الجذري لشركة AssemblyAI
             config = aai.TranscriptionConfig(
                 speech_models=["universal-2"],
                 language_detection=True
@@ -183,9 +200,10 @@ def callback_handler(call):
             
             bot.edit_message_text("4️⃣ جاري دمج الترجمة على الفيديو، لحظات ويكون جاهز! 🎬", call.message.chat.id, status_msg.message_id)
             
+            # التعديل الجديد: إزالة المربع الأسود وتغييره لخط أبيض بحدود سوداء واضحة وحجم مناسب
             ffmpeg_cmd = [
                 'ffmpeg', '-i', vid_filename, 
-                '-vf', "subtitles=translated.srt:force_style='FontSize=24,PrimaryColour=&H00FFFFFF,BorderStyle=3,Outline=1,Shadow=1,MarginV=20'", 
+                '-vf', "subtitles=translated.srt:force_style='FontSize=16,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=1,MarginV=30'", 
                 'final_video.mp4', '-y'
             ]
             result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
