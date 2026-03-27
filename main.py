@@ -1,4 +1,5 @@
 import telebot
+import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import yt_dlp
 import os
@@ -95,28 +96,27 @@ def download_video(message):
     url = message.text
     msg = bot.reply_to(message, "جاري معالجة الرابط والتحميل، يرجى الانتظار قليلاً... ⏳")
     
+    # تحسين طريقة الحفظ عشان نتجنب أخطاء تيك توك
     ydl_opts = {
-        'outtmpl': 'downloaded_video.%(ext)s',
-        'format': 'best[ext=mp4]/best'
+        'outtmpl': 'downloaded_vid_%(id)s.%(ext)s',
+        'format': 'best'
     }
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
         
-        for file in os.listdir('.'):
-            if file.startswith('downloaded_video'):
-                markup = InlineKeyboardMarkup()
-                trans_btn = InlineKeyboardButton(text="ترجمة الفيديو 🌍", callback_data="trans_menu")
-                markup.add(trans_btn)
-                
-                with open(file, 'rb') as video:
-                    sent_msg = bot.send_video(message.chat.id, video, reply_markup=markup)
-                    video_cache[sent_msg.message_id] = url
-                
-                os.remove(file)
-                bot.delete_message(message.chat.id, msg.message_id)
-                break
+        markup = InlineKeyboardMarkup()
+        trans_btn = InlineKeyboardButton(text="ترجمة الفيديو 🌍", callback_data="trans_menu")
+        markup.add(trans_btn)
+        
+        with open(filename, 'rb') as video:
+            sent_msg = bot.send_video(message.chat.id, video, reply_markup=markup)
+            video_cache[sent_msg.message_id] = url
+        
+        os.remove(filename)
+        bot.delete_message(message.chat.id, msg.message_id)
                 
     except Exception as e:
         bot.reply_to(message, f"حدث خطأ أثناء التحميل:\n\n{str(e)}")
@@ -153,16 +153,13 @@ def callback_handler(call):
             
             bot.edit_message_text("2️⃣ جاري الاستماع للفيديو وتفريغ الصوت (الذكاء الاصطناعي يعمل)... 🧠", call.message.chat.id, status_msg.message_id)
             
-            # استخراج الصوت
             subprocess.run(['ffmpeg', '-i', 'temp_vid.mp4', '-q:a', '0', '-map', 'a', 'temp_audio.mp3', '-y'])
             
-            # التعديل الجديد هنا: استخدام speech_models كقائمة 
+            # الحل السحري: سيبنا النظام هو اللي يختار الموديل المناسب
             config = aai.TranscriptionConfig(
-                speech_models=[aai.SpeechModel.nano],
                 language_detection=True
             )
             
-            # تفريغ الصوت باستخدام AssemblyAI
             transcriber = aai.Transcriber(config=config)
             transcript = transcriber.transcribe("temp_audio.mp3")
             
@@ -174,7 +171,6 @@ def callback_handler(call):
             
             bot.edit_message_text("3️⃣ جاري ترجمة النص للغة المطلوبة... 🌍", call.message.chat.id, status_msg.message_id)
             
-            # ترجمة النص
             translated_srt = translate_srt_text(original_srt, target_lang)
             
             with open("translated.srt", "w", encoding="utf-8") as f:
@@ -182,7 +178,6 @@ def callback_handler(call):
             
             bot.edit_message_text("4️⃣ جاري دمج الترجمة على الفيديو، لحظات ويكون جاهز! 🎬", call.message.chat.id, status_msg.message_id)
             
-            # الدمج النهائي مع إضافة خلفية سوداء شفافة للترجمة عشان تكون واضحة
             ffmpeg_cmd = [
                 'ffmpeg', '-i', 'temp_vid.mp4', 
                 '-vf', "subtitles=translated.srt:force_style='FontSize=24,PrimaryColour=&H00FFFFFF,BorderStyle=3,Outline=1,Shadow=1,MarginV=20'", 
@@ -197,7 +192,6 @@ def callback_handler(call):
                     bot.send_video(call.message.chat.id, translated_vid, caption=f"✅ تمت الترجمة بنجاح بواسطة @MyVidDownloader_bot")
                 bot.delete_message(call.message.chat.id, status_msg.message_id)
             
-            # تنظيف الملفات
             for f_name in ['temp_vid.mp4', 'temp_audio.mp3', 'final_video.mp4', 'translated.srt']:
                 if os.path.exists(f_name):
                     os.remove(f_name)
