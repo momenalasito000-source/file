@@ -5,12 +5,18 @@ import os
 import subprocess
 from keep_alive import keep_alive 
 import static_ffmpeg
+import assemblyai as aai
+from deep_translator import GoogleTranslator
+
 static_ffmpeg.add_paths()
 
 TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
-# قاموس لتخزين روابط الفيديوهات عشان لما المستخدم يطلب ترجمتها بعدين
+# مفتاح الذكاء الاصطناعي بتاعك
+aai.settings.api_key = '574d2294a8cf4590b594b4cae9ad59b5'
+
+# قاموس لتخزين روابط الفيديوهات
 video_cache = {}
 
 def get_required_channels():
@@ -44,6 +50,26 @@ def get_sub_keyboard(unsub_channels):
         btn = InlineKeyboardButton(text=f"📢 اشترك في القناة {i+1}", url=f"https://t.me/{ch_username}")
         markup.add(btn)
     return markup
+
+def translate_srt_text(srt_text, target_lang):
+    """دالة لترجمة الكلام فقط وترك التوقيتات كما هي"""
+    lines = srt_text.split('\n')
+    translated_lines = []
+    translator = GoogleTranslator(source='auto', target=target_lang)
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            translated_lines.append('')
+        elif '-->' in line or line.isdigit():
+            translated_lines.append(line)
+        else:
+            try:
+                translated = translator.translate(line)
+                translated_lines.append(translated)
+            except:
+                translated_lines.append(line)
+    return '\n'.join(translated_lines)
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -80,14 +106,12 @@ def download_video(message):
         
         for file in os.listdir('.'):
             if file.startswith('downloaded_video'):
-                # عمل زرار الترجمة
                 markup = InlineKeyboardMarkup()
                 trans_btn = InlineKeyboardButton(text="ترجمة الفيديو 🌍", callback_data="trans_menu")
                 markup.add(trans_btn)
                 
                 with open(file, 'rb') as video:
                     sent_msg = bot.send_video(message.chat.id, video, reply_markup=markup)
-                    # حفظ الرابط في الذاكرة عشان لو طلب ترجمته
                     video_cache[sent_msg.message_id] = url
                 
                 os.remove(file)
@@ -97,10 +121,8 @@ def download_video(message):
     except Exception as e:
         bot.reply_to(message, f"حدث خطأ أثناء التحميل:\n\n{str(e)}")
 
-# التعامل مع ضغطات الأزرار (الترجمة واختيار اللغة)
 @bot.callback_query_handler(func=lambda call: True)
 def callback_handler(call):
-    # لو ضغط على زرار ترجمة الفيديو الرئيسي
     if call.data == "trans_menu":
         markup = InlineKeyboardMarkup()
         markup.add(
@@ -113,7 +135,6 @@ def callback_handler(call):
         )
         bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=markup)
 
-    # لو اختار لغة معينة
     elif call.data.startswith("lang_"):
         target_lang = call.data.split("_")[1]
         url = video_cache.get(call.message.message_id)
@@ -122,39 +143,57 @@ def callback_handler(call):
             bot.answer_callback_query(call.id, "عذراً، الرابط قديم. يرجى إرسال الفيديو من جديد.", show_alert=True)
             return
 
-        bot.answer_callback_query(call.id, "جاري تجهيز الترجمة... ⏳")
-        bot.send_message(call.message.chat.id, "جاري سحب الصوت ودمج الترجمة، قد يستغرق هذا دقيقة... ⚙️")
+        bot.answer_callback_query(call.id, "بدأنا العمل... ⏳")
+        status_msg = bot.send_message(call.message.chat.id, "1️⃣ جاري تحميل الفيديو لاستخراج الصوت... ⚙️")
 
-        # إجبار التنزيل بصيغة mp4 صريحة
         ydl_opts = {'outtmpl': 'temp_vid.mp4', 'format': 'best'}
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
             
-            srt_content = """1
-00:00:01,000 --> 00:00:07,000
-تمت الترجمة بنجاح بواسطة @MyVidDownloader_bot!
-"""
-            with open("subtitles.srt", "w", encoding="utf-8") as f:
-                f.write(srt_content)
+            bot.edit_message_text("2️⃣ جاري الاستماع للفيديو وتفريغ الصوت (الذكاء الاصطناعي يعمل)... 🧠", call.message.chat.id, status_msg.message_id)
             
-            # تشغيل FFmpeg مع التقاط الأخطاء لمنع التجميد
-            result = subprocess.run(['ffmpeg', '-i', 'temp_vid.mp4', '-vf', 'subtitles=subtitles.srt', 'final_video.mp4', '-y'], capture_output=True, text=True)
+            # استخراج الصوت
+            subprocess.run(['ffmpeg', '-i', 'temp_vid.mp4', '-q:a', '0', '-map', 'a', 'temp_audio.mp3', '-y'])
+            
+            # تفريغ الصوت باستخدام AssemblyAI
+            transcriber = aai.Transcriber()
+            transcript = transcriber.transcribe("temp_audio.mp3")
+            
+            if transcript.error:
+                bot.edit_message_text(f"حدث خطأ في الذكاء الاصطناعي: {transcript.error}", call.message.chat.id, status_msg.message_id)
+                return
+                
+            original_srt = transcript.export_subtitles_srt()
+            
+            bot.edit_message_text("3️⃣ جاري ترجمة النص للغة المطلوبة... 🌍", call.message.chat.id, status_msg.message_id)
+            
+            # ترجمة النص
+            translated_srt = translate_srt_text(original_srt, target_lang)
+            
+            with open("translated.srt", "w", encoding="utf-8") as f:
+                f.write(translated_srt)
+            
+            bot.edit_message_text("4️⃣ جاري دمج الترجمة على الفيديو، لحظات ويكون جاهز! 🎬", call.message.chat.id, status_msg.message_id)
+            
+            # الدمج النهائي
+            result = subprocess.run(['ffmpeg', '-i', 'temp_vid.mp4', '-vf', 'subtitles=translated.srt', 'final_video.mp4', '-y'], capture_output=True, text=True)
             
             if result.returncode != 0:
-                bot.send_message(call.message.chat.id, f"⚠️ خطأ في برنامج الدمج:\n{result.stderr[-300:]}")
+                bot.edit_message_text(f"⚠️ خطأ في برنامج الدمج:\n{result.stderr[-300:]}", call.message.chat.id, status_msg.message_id)
             else:
                 with open('final_video.mp4', 'rb') as translated_vid:
-                    bot.send_video(call.message.chat.id, translated_vid, caption=f"✅ تم دمج الترجمة بنجاح!")
+                    bot.send_video(call.message.chat.id, translated_vid, caption=f"✅ تمت الترجمة بنجاح بواسطة @MyVidDownloader_bot")
+                bot.delete_message(call.message.chat.id, status_msg.message_id)
             
-            # تنظيف الملفات سواء نجح أو فشل
-            for f_name in ['temp_vid.mp4', 'final_video.mp4', 'subtitles.srt']:
+            # تنظيف الملفات
+            for f_name in ['temp_vid.mp4', 'temp_audio.mp3', 'final_video.mp4', 'translated.srt']:
                 if os.path.exists(f_name):
                     os.remove(f_name)
             
         except Exception as e:
-            bot.send_message(call.message.chat.id, f"حدث خطأ أثناء الترجمة: {e}")
+            bot.edit_message_text(f"حدث خطأ غير متوقع: {e}", call.message.chat.id, status_msg.message_id)
 
 keep_alive()
-print("البوت يعمل الآن ومستعد للترجمة...")
+print("البوت جاهز للاستماع والترجمة!")
 bot.infinity_polling()
