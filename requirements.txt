@@ -2,3 +2,5 @@ pyTelegramBotAPI
 yt-dlp
 flask
 static-ffmpeg
+assemblyai
+deep-translator
