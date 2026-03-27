@@ -156,8 +156,14 @@ def callback_handler(call):
             # استخراج الصوت
             subprocess.run(['ffmpeg', '-i', 'temp_vid.mp4', '-q:a', '0', '-map', 'a', 'temp_audio.mp3', '-y'])
             
+            # إعدادات الذكاء الاصطناعي: الموديل السريع والتعرف التلقائي على اللغة
+            config = aai.TranscriptionConfig(
+                speech_model=aai.SpeechModel.nano,
+                language_detection=True
+            )
+            
             # تفريغ الصوت باستخدام AssemblyAI
-            transcriber = aai.Transcriber()
+            transcriber = aai.Transcriber(config=config)
             transcript = transcriber.transcribe("temp_audio.mp3")
             
             if transcript.error:
@@ -176,8 +182,13 @@ def callback_handler(call):
             
             bot.edit_message_text("4️⃣ جاري دمج الترجمة على الفيديو، لحظات ويكون جاهز! 🎬", call.message.chat.id, status_msg.message_id)
             
-            # الدمج النهائي
-            result = subprocess.run(['ffmpeg', '-i', 'temp_vid.mp4', '-vf', 'subtitles=translated.srt', 'final_video.mp4', '-y'], capture_output=True, text=True)
+            # الدمج النهائي مع إضافة خلفية سوداء شفافة للترجمة عشان تكون واضحة
+            ffmpeg_cmd = [
+                'ffmpeg', '-i', 'temp_vid.mp4', 
+                '-vf', "subtitles=translated.srt:force_style='FontSize=24,PrimaryColour=&H00FFFFFF,BorderStyle=3,Outline=1,Shadow=1,MarginV=20'", 
+                'final_video.mp4', '-y'
+            ]
+            result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
             
             if result.returncode != 0:
                 bot.edit_message_text(f"⚠️ خطأ في برنامج الدمج:\n{result.stderr[-300:]}", call.message.chat.id, status_msg.message_id)
