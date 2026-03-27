@@ -52,21 +52,22 @@ def get_sub_keyboard(unsub_channels):
     return markup
 
 def translate_srt_text(srt_text, target_lang):
-    """الحل الأول: الترجمة الآمنة سطر بسطر مع تأخير زمني لتجنب حظر جوجل"""
+    """نظام الترجمة المكافح: محاولات متعددة لتجنب حظر جوجل وضمان ترجمة كل كلمة"""
     lines = srt_text.split('\n')
     translator = GoogleTranslator(source='auto', target=target_lang)
     
     for i in range(len(lines)):
         line = lines[i].strip()
-        # لو السطر مش فاضي، ومش رقم، ومش توقيت.. يبقى ده الكلام اللي هيترجم
         if line and not line.isdigit() and '-->' not in line:
-            try:
-                translated = translator.translate(line)
-                lines[i] = translated
-                time.sleep(0.2) # تأخير 200 ملي ثانية عشان جوجل ميحظرناش
-            except Exception as e:
-                print(f"Error: {e}")
-                pass
+            # هنحاول نترجم الجملة 3 مرات لو جوجل رفض
+            for attempt in range(3):
+                try:
+                    translated = translator.translate(line)
+                    lines[i] = translated
+                    time.sleep(0.3) # نريح جوجل شوية
+                    break # لو نجح يخرج من المحاولات ويدخل ع الجملة اللي بعدها
+                except Exception as e:
+                    time.sleep(1) # لو فشل، يستنى ثانية ويحاول تاني
     return '\n'.join(lines)
 
 @bot.message_handler(commands=['start'])
@@ -170,20 +171,19 @@ def callback_handler(call):
                 
             original_srt = transcript.export_subtitles_srt()
             
-            bot.edit_message_text("3️⃣ جاري الترجمة الاحترافية للغة المطلوبة... 🌍", call.message.chat.id, status_msg.message_id)
+            bot.edit_message_text("3️⃣ جاري الترجمة الدقيقة للغة المطلوبة... 🌍", call.message.chat.id, status_msg.message_id)
             
             translated_srt = translate_srt_text(original_srt, target_lang)
             
             with open("translated.srt", "w", encoding="utf-8") as f:
                 f.write(translated_srt)
             
-            bot.edit_message_text("4️⃣ جاري دمج الترجمة على الفيديو، لحظات ويكون جاهز! 🎬", call.message.chat.id, status_msg.message_id)
+            bot.edit_message_text("4️⃣ جاري حقن الترجمة داخل الفيديو بلمح البصر! ⚡", call.message.chat.id, status_msg.message_id)
             
-            # تم ضبط شكل الترجمة: خط واضح، بدون مربعات سوداء، مع حد خارجي أسود للقراءة السهلة
+            # الحل الثالث: حقن الترجمة كـ Stream منفصل (Soft Subtitle) سريع جداً ولا يؤثر على جودة الفيديو
             ffmpeg_cmd = [
-                'ffmpeg', '-i', vid_filename, 
-                '-vf', "subtitles=translated.srt:force_style='FontName=Arial,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=0,Alignment=2,MarginV=25'", 
-                'final_video.mp4', '-y'
+                'ffmpeg', '-i', vid_filename, '-i', 'translated.srt',
+                '-c', 'copy', '-c:s', 'mov_text', 'final_video.mp4', '-y'
             ]
             result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
             
@@ -191,9 +191,15 @@ def callback_handler(call):
                 bot.edit_message_text(f"⚠️ خطأ في برنامج الدمج:\n{result.stderr[-300:]}", call.message.chat.id, status_msg.message_id)
             else:
                 with open('final_video.mp4', 'rb') as translated_vid:
-                    bot.send_video(call.message.chat.id, translated_vid, caption=f"✅ تمت الترجمة بنجاح بواسطة @MyVidDownloader_bot")
+                    # هنبعتله الفيديو ونفهمه يشغل الترجمة إزاي
+                    bot.send_video(
+                        call.message.chat.id, 
+                        translated_vid, 
+                        caption=f"✅ تمت الترجمة بنجاح بواسطة @MyVidDownloader_bot\n\n💡 *تلميح:* اضغط على زرار (CC) أو (الترجمة) في مشغل الفيديو لتفعيلها."
+                    )
                 bot.delete_message(call.message.chat.id, status_msg.message_id)
             
+            # تنظيف الملفات
             for f_name in [vid_filename, 'temp_audio.mp3', 'final_video.mp4', 'translated.srt']:
                 if os.path.exists(f_name):
                     os.remove(f_name)
@@ -202,5 +208,5 @@ def callback_handler(call):
             bot.edit_message_text(f"حدث خطأ غير متوقع: {e}", call.message.chat.id, status_msg.message_id)
 
 keep_alive()
-print("البوت جاهز للاستماع والترجمة!")
+print("البوت جاهز للاستماع والترجمة السريعة!")
 bot.infinity_polling()
